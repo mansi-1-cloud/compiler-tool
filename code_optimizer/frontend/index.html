@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code Optimizer - Multi-Language Code Optimization Tool</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1>🚀 Code Optimizer</h1>
+                <p class="subtitle">Multi-Language Code Optimization Tool</p>
+                <p class="description">Optimize C, C++, Java, and Python code with advanced optimization techniques</p>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Sidebar with Controls -->
+            <aside class="sidebar">
+                <div class="control-panel">
+                    <h2>Controls</h2>
+
+                    <!-- Language Selection -->
+                    <div class="control-group">
+                        <label for="language-select">Programming Language:</label>
+                        <div class="language-selector">
+                            <select id="language-select">
+                                <option value="python">🐍 Python</option>
+                                <option value="java">☕ Java</option>
+                                <option value="cpp">⚙️ C++</option>
+                                <option value="c">📱 C</option>
+                            </select>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="auto-detect" />
+                                Auto-detect language
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="control-group">
+                        <button class="btn btn-primary" id="optimize-btn">
+                            <span>⚡</span> Optimize Code
+                        </button>
+                        <button class="btn btn-secondary" id="load-sample-btn">
+                            <span>📄</span> Load Sample
+                        </button>
+                        <button class="btn btn-secondary" id="clear-btn">
+                            <span>🗑️</span> Clear All
+                        </button>
+                    </div>
+
+                    <!-- Statistics -->
+                    <div class="control-group">
+                        <h3>Optimization Statistics</h3>
+                        <div class="stats">
+                            <div class="stat-item">
+                                <span class="stat-label">Total Optimizations:</span>
+                                <span class="stat-value" id="stat-total">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Original Lines:</span>
+                                <span class="stat-value" id="stat-original">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Optimized Lines:</span>
+                                <span class="stat-value" id="stat-optimized">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Lines Saved:</span>
+                                <span class="stat-value" id="stat-saved">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Optimization Categories -->
+                    <div class="control-group">
+                        <h3>Optimizations Applied</h3>
+                        <div id="optimization-categories" class="optimization-categories"></div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Code Editor Area -->
+            <section class="editor-area">
+                <!-- Original Code Panel -->
+                <div class="code-panel">
+                    <div class="panel-header">
+                        <h2>📝 Original Code</h2>
+                        <span class="line-count" id="original-line-count">Lines: 0</span>
+                    </div>
+                    <textarea 
+                        id="original-code" 
+                        class="code-editor" 
+                        placeholder="Paste your code here..."
+                        spellcheck="false"
+                    ></textarea>
+                </div>
+
+                <!-- Optimized Code Panel -->
+                <div class="code-panel">
+                    <div class="panel-header">
+                        <h2>✨ Optimized Code</h2>
+                        <span class="line-count" id="optimized-line-count">Lines: 0</span>
+                    </div>
+                    <textarea 
+                        id="optimized-code" 
+                        class="code-editor" 
+                        placeholder="Optimized code will appear here..."
+                        readonly
+                        spellcheck="false"
+                    ></textarea>
+                    <button class="btn btn-small" id="copy-btn" style="display: none;">
+                        <span>📋</span> Copy Optimized Code
+                    </button>
+                </div>
+            </section>
+        </main>
+
+        <!-- Details Panel -->
+        <section class="details-panel" id="details-panel" style="display: none;">
+            <div class="details-header">
+                <h2>📊 Optimization Details</h2>
+                <button class="close-btn" id="close-details">&times;</button>
+            </div>
+            <div class="details-content">
+                <div id="optimizations-list" class="optimizations-list"></div>
+            </div>
+        </section>
+
+        <!-- Status Message -->
+        <div id="status-message" class="status-message"></div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loading-spinner" class="loading-spinner" style="display: none;">
+        <div class="spinner"></div>
+        <p>Optimizing code...</p>
+    </div>
+
+    <!-- Scripts -->
+    <script src="script.js"></script>
+</body>
+</html>
