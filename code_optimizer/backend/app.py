@@ -5,7 +5,6 @@ Multi-Language Code Optimization Tool API Server
 Endpoints:
     POST /optimize - Optimize source code
     GET /health - Server health check
-    POST/detect-language - Detect code language
 """
 
 from flask import Flask, request, jsonify
@@ -29,7 +28,7 @@ CORS(app)  # Enable CORS for all routes
 
 # Configuration
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB max upload
-SUPPORTED_LANGUAGES = ['python', 'java', 'c', 'cpp', 'c++']
+SUPPORTED_LANGUAGES = ['java', 'c', 'cpp', 'c++']
 
 
 @app.route('/health', methods=['GET'])
@@ -50,8 +49,8 @@ def optimize():
     Request JSON:
     {
         "code": "source code string",
-        "language": "python|java|c|cpp",
-        "auto_detect": true (optional, default: false)
+        "language": "java|c|cpp|c++",
+        "extension": ".java" (optional)
     }
     
     Response JSON:
@@ -62,7 +61,7 @@ def optimize():
         "optimizations_applied": [
             {
                 "type": "constant_folding",
-                "line": "original line",
+                "line_number": 5,
                 "optimization": "description"
             }
         ],
@@ -84,8 +83,8 @@ def optimize():
         
         # Extract parameters
         code = request.json.get('code', '').strip()
-        language = request.json.get('language', 'python').lower()
-        auto_detect = request.json.get('auto_detect', False)
+        language = request.json.get('language', 'java').lower()
+        file_extension = request.json.get('extension', '').lower()
         
         # Validate code
         if not code:
@@ -94,34 +93,25 @@ def optimize():
                 'error': 'Code cannot be empty'
             }), 400
         
+        # Detect language from extension if provided
+        if file_extension:
+            ext_map = {
+                '.java': 'java',
+                '.cpp': 'cpp',
+                '.cc': 'cpp',
+                '.cxx': 'cpp',
+                '.c': 'c',
+                '.h': 'c'
+            }
+            if file_extension in ext_map:
+                language = ext_map[file_extension]
+        
         # Validate language
         if language not in SUPPORTED_LANGUAGES:
             return jsonify({
                 'success': False,
                 'error': f'Unsupported language: {language}. Supported: {", ".join(SUPPORTED_LANGUAGES)}'
             }), 400
-        
-        # Auto-detect language if requested
-        if auto_detect:
-            detector = LanguageDetector()
-            detected_lang, confidence = detector.detect(code)
-            
-            if confidence > 0.6:
-                language = detected_lang
-                language_info = {
-                    'detected_language': detected_lang,
-                    'confidence': round(confidence, 2),
-                    'original_language': request.json.get('language', 'unknown')
-                }
-            else:
-                language_info = {
-                    'detected_language': detected_lang,
-                    'confidence': round(confidence, 2),
-                    'original_language': request.json.get('language', 'unknown'),
-                    'note': 'Low confidence, using specified or detected language'
-                }
-        else:
-            language_info = {'specified_language': language}
         
         # Perform optimization
         optimizer = CodeOptimizer(language)
@@ -134,7 +124,6 @@ def optimize():
             'success': True,
             'optimized_code': result['optimized_code'],
             'language': language,
-            'language_info': language_info,
             'optimizations_applied': result['optimizations_applied'],
             'statistics': {
                 'total_optimizations': report['total_optimizations'],
@@ -152,68 +141,6 @@ def optimize():
         }), 500
 
 
-@app.route('/detect-language', methods=['POST'])
-def detect_language():
-    """
-    Detect programming language from code
-    
-    Request JSON:
-    {
-        "code": "source code string",
-        "user_language": "python" (optional)
-    }
-    
-    Response JSON:
-    {
-        "success": true,
-        "detected_language": "python",
-        "confidence": 0.85,
-        "all_scores": {
-            "python": 92.5,
-            "java": 10.0,
-            ...
-        },
-        "recommendations": []
-    }
-    """
-    try:
-        if not request.json:
-            return jsonify({
-                'success': False,
-                'error': 'Request must be JSON'
-            }), 400
-        
-        code = request.json.get('code', '').strip()
-        user_language = request.json.get('user_language', None)
-        
-        if not code:
-            return jsonify({
-                'success': False,
-                'error': 'Code cannot be empty'
-            }), 400
-        
-        # Detect language
-        detector = LanguageDetector()
-        detected_lang, confidence = detector.detect(code)
-        
-        # Get detailed info
-        details = detector.get_detection_details()
-        
-        return jsonify({
-            'success': True,
-            'detected_language': detected_lang,
-            'confidence': round(confidence, 2),
-            'all_scores': details['scores_detailed'],
-            'is_confident': detector.is_confident(0.6)
-        }), 200
-    
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': f'Language detection failed: {str(e)}'
-        }), 500
-
-
 @app.route('/supported-languages', methods=['GET'])
 def supported_languages():
     """Get list of supported languages"""
@@ -223,7 +150,10 @@ def supported_languages():
             'constant_folding',
             'dead_code_elimination',
             'redundant_assignment_removal',
-            'unused_variable_removal'
+            'unused_variable_removal',
+            'loop_elimination',
+            'function_inlining',
+            'duplicate_call_removal'
         ]
     }), 200
 
@@ -231,22 +161,9 @@ def supported_languages():
 @app.route('/sample-code', methods=['GET'])
 def sample_code():
     """Get sample code for each language"""
-    language = request.args.get('language', 'python').lower()
+    language = request.args.get('language', 'java').lower()
     
     samples = {
-        'python': '''# Sample Python code
-x = 5 + 3  # Will be constant folded to 8
-y = 10
-unused_var = 42  # Unused variable
-
-def calculate(a, b):
-    result = a * 2 * 3  # Can be folded to 6
-    temp = 100  # Redundant assignment
-    temp = result + b
-    return temp
-
-print(calculate(5, 10))
-''',
         'java': '''// Sample Java code
 public class Calculator {
     public static void main(String[] args) {
@@ -292,7 +209,7 @@ int main() {
 '''
     }
     
-    code = samples.get(language, samples['python'])
+    code = samples.get(language, samples['java'])
     
     return jsonify({
         'language': language,

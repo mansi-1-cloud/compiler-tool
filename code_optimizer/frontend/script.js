@@ -15,7 +15,6 @@ const loadSampleBtn = document.getElementById('load-sample-btn');
 const clearBtn = document.getElementById('clear-btn');
 const copyBtn = document.getElementById('copy-btn');
 const languageSelect = document.getElementById('language-select');
-const autoDetectCheckbox = document.getElementById('auto-detect');
 const statusMessage = document.getElementById('status-message');
 const loadingSpinner = document.getElementById('loading-spinner');
 const detailsPanel = document.getElementById('details-panel');
@@ -32,7 +31,7 @@ const optimizedLineCount = document.getElementById('optimized-line-count');
 const optimizationCategories = document.getElementById('optimization-categories');
 
 // State
-let currentLanguage = 'python';
+let currentLanguage = 'java';
 let lastOptimizationResult = null;
 
 /**
@@ -47,9 +46,12 @@ function initializeEventListeners() {
         currentLanguage = e.target.value;
         lineCountCheck();
     });
-    closeDetailsBtn.addEventListener('click', () => {
-        detailsPanel.style.display = 'none';
-    });
+    
+    if (closeDetailsBtn) {
+        closeDetailsBtn.addEventListener('click', () => {
+            detailsPanel.style.display = 'none';
+        });
+    }
 
     // Update line counts as user types
     originalCodeEl.addEventListener('input', debounce(lineCountCheck, 200));
@@ -104,6 +106,19 @@ function showLoading(show = true) {
 }
 
 /**
+ * Get file extension based on language
+ */
+function getFileExtension(language) {
+    const extensions = {
+        'java': '.java',
+        'cpp': '.cpp',
+        'c': '.c',
+        'c++': '.cpp'
+    };
+    return extensions[language] || '';
+}
+
+/**
  * Optimize code via API
  */
 async function optimizeCode() {
@@ -126,7 +141,7 @@ async function optimizeCode() {
             body: JSON.stringify({
                 code: code,
                 language: currentLanguage,
-                auto_detect: autoDetectCheckbox.checked,
+                extension: getFileExtension(currentLanguage)
             }),
         });
 
@@ -148,21 +163,14 @@ async function optimizeCode() {
             // Update optimization categories
             updateOptimizationCategories(result.statistics.optimization_categories);
 
-            // Show details
+            // Show optimizations with line numbers
             displayOptimizationDetails(result.optimizations_applied);
 
-            // Show language info if auto-detect was used
-            if (autoDetectCheckbox.checked && result.language_info.detected_language !== currentLanguage) {
-                showStatus(
-                    `Language auto-detected: ${result.language_info.detected_language} (confidence: ${result.language_info.confidence})`,
-                    'info',
-                    5000
-                );
-                currentLanguage = result.language_info.detected_language;
-                languageSelect.value = currentLanguage;
-            }
-
-            showStatus(`✨ Code optimized successfully! ${result.statistics.total_optimizations} optimizations applied.`, 'success');
+            showStatus(
+                `✨ Code optimized successfully! ${result.statistics.total_optimizations} optimizations applied.`, 
+                'success',
+                5000
+            );
             copyBtn.style.display = result.optimized_code ? 'block' : 'none';
             lineCountCheck();
         } else {
@@ -203,6 +211,10 @@ function updateOptimizationCategories(categories) {
         'dead_code_elimination': '🗑️ Dead Code Elimination',
         'unused_variable_removal': '🔍 Unused Variables',
         'redundant_assignment_removal': '♻️ Redundant Assignments',
+        'loop_elimination': '🔁 Loop Elimination',
+        'function_inlining': '📦 Function Inlining',
+        'duplicate_call_removal': '🔄 Duplicate Calls',
+        'variable_combination': '🔗 Variable Combination'
     };
 
     for (const [category, count] of Object.entries(categories)) {
@@ -217,7 +229,7 @@ function updateOptimizationCategories(categories) {
 }
 
 /**
- * Display detailed optimization information
+ * Display detailed optimization information WITH LINE NUMBERS
  */
 function displayOptimizationDetails(optimizations) {
     if (!optimizations || optimizations.length === 0) {
@@ -231,38 +243,63 @@ function displayOptimizationDetails(optimizations) {
         const optItem = document.createElement('div');
         optItem.className = `optimization-item optimization-${opt.type}`;
 
-        let detailsHtml = `<div class="optimization-details">`;
+        // Create header with line number and type
+        const header = document.createElement('div');
+        header.className = 'optimization-header';
+        header.innerHTML = `
+            <span class="line-number">[Line ${opt.line_number}]</span>
+            <span class="optimization-type">${formatOptimizationType(opt.type)}</span>
+        `;
+
+        // Create details section
+        const details = document.createElement('div');
+        details.className = 'optimization-details';
+
+        // Format details based on optimization type
+        let detailsContent = '';
 
         if (opt.type === 'constant_folding') {
-            detailsHtml += `
-                <p><strong>Expression:</strong> ${escapeHtml(opt.optimization)}</p>
-                <p><strong>Original line:</strong> <code class="optimization-code">${escapeHtml(opt.line)}</code></p>
+            detailsContent = `
+                <p><strong>Expression:</strong> <code>${escapeHtml(opt.optimization)}</code></p>
             `;
         } else if (opt.type === 'unused_variable_removal') {
-            detailsHtml += `
-                <p><strong>Variable:</strong> ${escapeHtml(opt.variable)}</p>
-                <p><strong>Removed:</strong> <code class="optimization-code">${escapeHtml(opt.removed_line)}</code></p>
+            detailsContent = `
+                <p><strong>Variable:</strong> ${escapeHtml(opt.optimization)}</p>
             `;
         } else if (opt.type === 'dead_code_elimination') {
-            detailsHtml += `
-                <p><strong>Removed:</strong> <code class="optimization-code">${escapeHtml(opt.removed_line)}</code></p>
+            detailsContent = `
+                <p><strong>Removed:</strong> <code>${escapeHtml(opt.optimization)}</code></p>
             `;
         } else if (opt.type === 'redundant_assignment_removal') {
-            detailsHtml += `
-                <p><strong>Variable:</strong> ${escapeHtml(opt.variable)}</p>
-                <p><strong>Removed:</strong> <code class="optimization-code">${escapeHtml(opt.removed_line)}</code></p>
+            detailsContent = `
+                <p><strong>Variable:</strong> ${escapeHtml(opt.optimization)}</p>
+            `;
+        } else if (opt.type === 'loop_elimination') {
+            detailsContent = `
+                <p><strong>Optimization:</strong> <code>${escapeHtml(opt.optimization)}</code></p>
+            `;
+        } else if (opt.type === 'function_inlining') {
+            detailsContent = `
+                <p><strong>Optimization:</strong> ${escapeHtml(opt.optimization)}</p>
+            `;
+        } else if (opt.type === 'duplicate_call_removal') {
+            detailsContent = `
+                <p><strong>Optimization:</strong> ${escapeHtml(opt.optimization)}</p>
+            `;
+        } else if (opt.type === 'variable_combination') {
+            detailsContent = `
+                <p><strong>Optimization:</strong> ${escapeHtml(opt.optimization)}</p>
+            `;
+        } else {
+            detailsContent = `
+                <p><strong>Optimization:</strong> ${escapeHtml(opt.optimization)}</p>
             `;
         }
 
-        detailsHtml += '</div>';
+        details.innerHTML = detailsContent;
 
-        optItem.innerHTML = `
-            <div>
-                <span class="optimization-type">${formatOptimizationType(opt.type)}</span>
-                ${detailsHtml}
-            </div>
-        `;
-
+        optItem.appendChild(header);
+        optItem.appendChild(details);
         optimizationsList.appendChild(optItem);
     });
 
@@ -273,7 +310,18 @@ function displayOptimizationDetails(optimizations) {
  * Format optimization type name
  */
 function formatOptimizationType(type) {
-    return type
+    const names = {
+        'constant_folding': 'Constant Folding',
+        'dead_code_elimination': 'Dead Code Elimination',
+        'unused_variable_removal': 'Unused Variable Removal',
+        'redundant_assignment_removal': 'Redundant Assignment Removal',
+        'loop_elimination': 'Loop Elimination',
+        'function_inlining': 'Function Inlining',
+        'duplicate_call_removal': 'Duplicate Call Removal',
+        'variable_combination': 'Variable Combination'
+    };
+    
+    return names[type] || type
         .split('_')
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ');
@@ -310,7 +358,7 @@ async function loadSampleCode() {
         lineCountCheck();
         resetStatistics();
 
-        showStatus('Sample code loaded. Click "Optimize Code" to see optimizations!', 'info');
+        showStatus('Sample code loaded. Click "Optimize Code" to see optimizations!', 'info', 4000);
     } catch (error) {
         showStatus(`Error loading sample: ${error.message}`, 'error');
         console.error('Error:', error);
@@ -374,7 +422,11 @@ async function checkBackendHealth() {
         const result = await response.json();
         console.log('Backend health:', result);
     } catch (error) {
-        showStatus('⚠️ Backend server not reachable. Make sure Flask server is running on port 5001.', 'error', 0);
+        showStatus(
+            '⚠️ Backend server not reachable. Make sure Flask server is running on port 5001.', 
+            'error', 
+            0
+        );
         console.error('Health check failed:', error);
     }
 }

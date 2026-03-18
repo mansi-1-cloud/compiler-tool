@@ -1,7 +1,7 @@
 """
 Language Detector Module
 Detects programming language from source code
-Supports: C, C++, Java, Python
+Supports: C, C++, Java (Python removed)
 """
 
 import re
@@ -13,20 +13,6 @@ class LanguageDetector:
     
     # Language signatures - unique patterns for each language
     SIGNATURES = {
-        'python': {
-            'keywords': ['def ', 'class ', 'import ', 'from ', 'if __name__', 'print(', 'self.'],
-            'patterns': [
-                r'^\s*def\s+\w+\s*\(',  # def keyword
-                r'^\s*import\s+\w+',     # import statement
-                r'^\s*from\s+\w+\s+import',  # from import
-                r'^\s*class\s+\w+\s*:',  # class definition
-                r'^\s*for\s+\w+\s+in\s+',  # for in loop
-                r':\s*$',                # Line ends with colon (Python blocks)
-                r'print\(',              # print function
-            ],
-            'file_extensions': ['.py'],
-            'score_multiplier': 1.0
-        },
         'java': {
             'keywords': ['public class', 'private', 'protected', 'void', 'static', 'import java', 'new', 'extends', 'implements'],
             'patterns': [
@@ -81,7 +67,7 @@ class LanguageDetector:
         
         Args:
             code: Source code string
-            file_extension: Optional file extension (e.g., '.py', '.java')
+            file_extension: Optional file extension (e.g., '.java', '.cpp')
             
         Returns:
             Tuple of (language, confidence_score)
@@ -100,12 +86,12 @@ class LanguageDetector:
         
         # Find language with highest score
         if not self.scores:
-            return 'python', 0.0
+            return 'java', 0.0
         
         max_score = max(self.scores.values())
         
         if max_score == 0:
-            return 'python', 0.0
+            return 'java', 0.0  # Changed from 'python' to 'java'
         
         # Normalize score to 0-1
         self.confidence = min(max_score / 100.0, 1.0)
@@ -160,24 +146,13 @@ class LanguageDetector:
         """Apply penalties for conflicting patterns"""
         code_lower = code.lower()
         
-        # Python-specific penalties
-        if language == 'python':
-            if 'public class' in code_lower or 'new ' in code_lower:
-                score -= 20  # Likely Java, not Python
-            if '#include' in code_lower:
-                score -= 20  # Likely C/C++, not Python
-        
         # Java-specific penalties
         if language == 'java':
-            if code_lower.count('def ') > code_lower.count('public'):
-                score -= 20  # More Python-like
             if '#include' in code_lower:
                 score -= 20  # C/C++ style
         
         # C/C++ penalties
         if language in ['c', 'cpp']:
-            if 'def ' in code_lower:
-                score -= 20  # Python style
             if 'public class' in code_lower:
                 score -= 20  # Java style
         
@@ -211,7 +186,7 @@ class LanguageValidator:
         
         Args:
             code: Source code
-            user_language: Language claimed by user (e.g., 'python')
+            user_language: Language claimed by user (e.g., 'java')
             file_extension: Optional file extension
             
         Returns:

@@ -13,7 +13,7 @@
             <div class="header-content">
                 <h1>🚀 Code Optimizer</h1>
                 <p class="subtitle">Multi-Language Code Optimization Tool</p>
-                <p class="description">Optimize C, C++, Java, and Python code with advanced optimization techniques</p>
+                <p class="description">Optimize C, C++ and Java code with advanced optimization techniques</p>
             </div>
         </header>
 
@@ -29,15 +29,10 @@
                         <label for="language-select">Programming Language:</label>
                         <div class="language-selector">
                             <select id="language-select">
-                                <option value="python">🐍 Python</option>
                                 <option value="java">☕ Java</option>
                                 <option value="cpp">⚙️ C++</option>
                                 <option value="c">📱 C</option>
                             </select>
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="auto-detect" />
-                                Auto-detect language
-                            </label>
                         </div>
                     </div>
 
@@ -79,8 +74,10 @@
 
                     <!-- Optimization Categories -->
                     <div class="control-group">
-                        <h3>Optimizations Applied</h3>
-                        <div id="optimization-categories" class="optimization-categories"></div>
+                        <h3>Optimization Categories</h3>
+                        <div class="optimization-categories" id="optimization-categories">
+                            <!-- Categories will be populated here -->
+                        </div>
                     </div>
                 </div>
             </aside>
@@ -121,16 +118,16 @@
             </section>
         </main>
 
-        <!-- Details Panel -->
-        <section class="details-panel" id="details-panel" style="display: none;">
+        <!-- Details Panel - Optimizations Applied with Line Numbers -->
+        <div id="details-panel" class="details-panel" style="display: none;">
             <div class="details-header">
-                <h2>📊 Optimization Details</h2>
-                <button class="close-btn" id="close-details">&times;</button>
+                <h3>Optimizations Applied</h3>
+                <button id="close-details" class="close-btn">&times;</button>
             </div>
-            <div class="details-content">
-                <div id="optimizations-list" class="optimizations-list"></div>
+            <div id="optimizations-list" class="optimizations-list">
+                <!-- Optimizations will be populated here with line numbers -->
             </div>
-        </section>
+        </div>
 
         <!-- Status Message -->
         <div id="status-message" class="status-message"></div>

@@ -1,7 +1,7 @@
 """
 Code Analyzer Module
 Analyzes source code to identify inefficient patterns and opportunities for optimization.
-Supports: C, C++, Java, Python
+Supports: C, C++, Java
 """
 
 import re
@@ -58,10 +58,8 @@ class CodeAnalyzer:
     
     def _is_comment(self, line: str) -> bool:
         """Check if line is a comment"""
-        if self.language == 'python':
-            return line.startswith('#')
-        else:  # C, C++, Java
-            return line.startswith('//') or line.startswith('/*')
+        # C, C++, Java all use // and /* */
+        return line.startswith('//') or line.startswith('/*')
     
     def extract_variables(self) -> Dict[str, List[int]]:
         """
@@ -93,33 +91,27 @@ class CodeAnalyzer:
     
     def _is_keyword(self, word: str) -> bool:
         """Check if word is a language keyword"""
-        python_keywords = {
-            'if', 'else', 'elif', 'for', 'while', 'def', 'class', 'return',
-            'import', 'from', 'as', 'try', 'except', 'finally', 'with',
-            'pass', 'break', 'continue', 'True', 'False', 'None', 'and', 'or',
-            'not', 'in', 'is', 'lambda', 'yield', 'assert', 'raise', 'del'
-        }
         
         c_cpp_keywords = {
             'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'default',
             'int', 'float', 'double', 'char', 'void', 'bool', 'return',
             'struct', 'union', 'enum', 'typedef', 'static', 'const', 'extern',
             'volatile', 'signed', 'unsigned', 'auto', 'register', 'inline',
-            'continue', 'break', 'goto', 'sizeof', 'typeof'
+            'continue', 'break', 'goto', 'sizeof', 'typeof', 'long', 'short'
         }
         
         java_keywords = {
             'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'default',
-            'int', 'float', 'double', 'char', 'void', 'boolean', 'return',
-            'class', 'interface', 'extends', 'implements', 'new', 'this',
-            'super', 'public', 'private', 'protected', 'static', 'final',
-            'abstract', 'synchronized', 'volatile', 'transient', 'native',
-            'continue', 'break', 'goto', 'instanceof', 'import', 'package'
+            'int', 'float', 'double', 'char', 'void', 'boolean', 'byte', 'short',
+            'long', 'return', 'class', 'interface', 'extends', 'implements', 'new',
+            'this', 'super', 'public', 'private', 'protected', 'static', 'final',
+            'abstract', 'synchronized', 'volatile', 'transient', 'native', 'strictfp',
+            'continue', 'break', 'goto', 'instanceof', 'import', 'package', 'throws',
+            'try', 'catch', 'finally', 'throw', 'assert', 'enum', 'true', 'false',
+            'null', 'String', 'Object', 'System'
         }
         
-        if self.language == 'python':
-            return word in python_keywords
-        elif self.language in ['c', 'cpp', 'c++']:
+        if self.language in ['c', 'cpp', 'c++']:
             return word in c_cpp_keywords
         elif self.language == 'java':
             return word in java_keywords
@@ -140,11 +132,12 @@ class CodeAnalyzer:
             # If variable appears only once (just assignment), it's likely unused
             if len(line_numbers) == 1:
                 line_num = line_numbers[0]
-                line_content = self.lines[line_num - 1].stripped
-                
-                # Check if it's an assignment (not a declaration without assignment)
-                if self._is_assignment(line_content, var_name):
-                    unused.add(var_name)
+                if line_num > 0 and line_num <= len(self.lines):
+                    line_content = self.lines[line_num - 1].stripped
+                    
+                    # Check if it's an assignment (not a declaration without assignment)
+                    if self._is_assignment(line_content, var_name):
+                        unused.add(var_name)
         
         return unused
     
