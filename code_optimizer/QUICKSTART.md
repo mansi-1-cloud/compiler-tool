@@ -17,7 +17,7 @@ cd ..
 ### 2. Start Backend Server
 ```bash
 cd backend
-python3 app.py
+py app.py
 ```
 You'll see: `* Running on http://0.0.0.0:5001/`
 
@@ -38,7 +38,7 @@ py -m http.server 8000
 
 ## Usage in 30 Seconds
 
-1. **Select a language** (Python, Java, C++, C)
+1. **Select a language** (Java, C++, C)
 2. **Paste or load sample code** into the left panel
 3. **Click "Optimize Code"** or press Ctrl+Enter
 4. **View optimizations** on the right side
@@ -126,14 +126,15 @@ curl "http://localhost:5001/sample-code?language=python"
 
 ## Features at a Glance
 
-✨ **4 Optimization Techniques:**
+✨ **6 Optimization Techniques:**
 1. Constant Folding (2+3 → 5)
 2. Dead Code Elimination (code after return)
 3. Unused Variable Removal
 4. Redundant Assignment Removal
+5. Algebraic Simplification (`x = x + 0`, `x = x * 1`)
+6. Loop Invariant Code Motion (hoist invariant expressions out of loops)
 
 🌍 **4 Programming Languages:**
-- Python
 - Java
 - C++
 - C

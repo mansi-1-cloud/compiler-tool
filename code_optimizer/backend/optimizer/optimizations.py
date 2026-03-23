@@ -28,6 +28,8 @@ class CodeOptimizer:
         optimized_code = self.inline_simple_functions(optimized_code)
         optimized_code = self.eliminate_redundant_loops(optimized_code)
         optimized_code = self.combine_variable_declarations(optimized_code)
+        optimized_code = self.perform_loop_invariant_code_motion(optimized_code)
+        optimized_code = self.simplify_redundant_expressions(optimized_code)
         optimized_code = self.remove_redundant_variables(optimized_code)
         optimized_code = self.remove_unused_functions(optimized_code)
         optimized_code = self.remove_unused_variables(optimized_code)
@@ -41,6 +43,145 @@ class CodeOptimizer:
             'optimizations_applied': self.optimizations_applied,
             'count': len(self.optimizations_applied)
         }
+
+    def simplify_redundant_expressions(self, code: str) -> str:
+        """Remove no-op assignments and simplify basic algebraic identities."""
+        lines = code.split('\n')
+        optimized_lines = []
+
+        patterns = [
+            # x = x + 0; or x = x - 0;
+            (re.compile(r'^\s*([A-Za-z_]\w*)\s*=\s*\1\s*[\+\-]\s*0\s*;\s*$'), 'self_identity_add_sub'),
+            # x = x * 1; or x = x / 1;
+            (re.compile(r'^\s*([A-Za-z_]\w*)\s*=\s*\1\s*[\*/]\s*1\s*;\s*$'), 'self_identity_mul_div'),
+            # x = x;
+            (re.compile(r'^\s*([A-Za-z_]\w*)\s*=\s*\1\s*;\s*$'), 'self_assignment')
+        ]
+
+        for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+
+            # Keep comments/preprocessor directives intact
+            if not stripped or stripped.startswith('//') or stripped.startswith('#'):
+                optimized_lines.append(line)
+                continue
+
+            removed = False
+            for pattern, reason in patterns:
+                match = pattern.match(stripped)
+                if match:
+                    var_name = match.group(1)
+                    opt_type = 'redundant_assignment_removal' if reason == 'self_assignment' else 'algebraic_simplification'
+                    self.optimizations_applied.append({
+                        'type': opt_type,
+                        'line_number': i,
+                        'optimization': f'Removed no-op assignment: {var_name} = {var_name}'
+                    })
+                    removed = True
+                    break
+
+            if not removed:
+                optimized_lines.append(line)
+
+        return '\n'.join(optimized_lines)
+
+    def perform_loop_invariant_code_motion(self, code: str) -> str:
+        """Hoist loop-invariant assignments from simple for-loops."""
+        lines = code.split('\n')
+        result_lines = []
+        i = 0
+
+        while i < len(lines):
+            line = lines[i]
+            stripped = line.strip()
+
+            if not stripped.startswith('for'):
+                result_lines.append(line)
+                i += 1
+                continue
+
+            header_match = re.match(r'^\s*for\s*\((.*?)\)\s*\{\s*$', stripped)
+            if not header_match:
+                result_lines.append(line)
+                i += 1
+                continue
+
+            loop_header = header_match.group(1)
+            iterator_match = re.search(r'(?:int|long|size_t)?\s*([A-Za-z_]\w*)\s*=', loop_header)
+            loop_iterator = iterator_match.group(1) if iterator_match else None
+
+            # Collect loop block lines up to matching closing brace
+            block_start = i + 1
+            brace_depth = 1
+            j = block_start
+            loop_block = []
+
+            while j < len(lines):
+                current = lines[j]
+                brace_depth += current.count('{')
+                brace_depth -= current.count('}')
+
+                if brace_depth == 0:
+                    break
+
+                loop_block.append(current)
+                j += 1
+
+            if j >= len(lines):
+                # Unbalanced braces, leave unchanged
+                result_lines.append(line)
+                i += 1
+                continue
+
+            assigned_in_loop = set()
+            assign_pattern = re.compile(r'^\s*(?:[A-Za-z_]\w*\s+)?([A-Za-z_]\w*)\s*=')
+
+            for block_line in loop_block:
+                assign_match = assign_pattern.match(block_line.strip())
+                if assign_match:
+                    assigned_in_loop.add(assign_match.group(1))
+
+            hoisted_lines = []
+            kept_loop_lines = []
+            invariant_pattern = re.compile(
+                r'^(\s*)([A-Za-z_]\w*(?:\s+[A-Za-z_]\w*)?)\s+([A-Za-z_]\w*)\s*=\s*([^;]+);\s*$'
+            )
+
+            for block_line in loop_block:
+                stripped_block = block_line.strip()
+                inv_match = invariant_pattern.match(block_line)
+
+                if not inv_match or stripped_block.startswith('//'):
+                    kept_loop_lines.append(block_line)
+                    continue
+
+                indent, var_decl, target_var, expr = inv_match.groups()
+                tokens = re.findall(r'\b[A-Za-z_]\w*\b', expr)
+
+                # Allow constants and symbols; reject expressions tied to iterator or mutated vars.
+                depends_on_mutated = any(token in assigned_in_loop for token in tokens)
+                depends_on_iterator = loop_iterator is not None and loop_iterator in tokens
+
+                if depends_on_mutated or depends_on_iterator:
+                    kept_loop_lines.append(block_line)
+                    continue
+
+                hoisted_lines.append(block_line)
+                self.optimizations_applied.append({
+                    'type': 'loop_invariant_code_motion',
+                    'line_number': i + 1,
+                    'optimization': f'Hoisted loop-invariant assignment: {target_var} = {expr.strip()}'
+                })
+
+            if hoisted_lines:
+                result_lines.extend(hoisted_lines)
+
+            result_lines.append(line)
+            result_lines.extend(kept_loop_lines)
+            result_lines.append(lines[j])
+            i = j + 1
+
+        return '\n'.join(result_lines)
     
     def validate_syntax(self, code: str) -> bool:
         """Validate syntax: matching braces and variables in main()"""
@@ -541,7 +682,7 @@ class CodeOptimizer:
                     for first_line, _, var_name in redundant_assignments:
                         if first_line == i:
                             self.optimizations_applied.append({
-                                'type': 'dead_code_removal',
+                                'type': 'redundant_assignment_removal',
                                 'line_number': i,
                                 'optimization': f'Removed redundant assignment to: {var_name}'
                             })

@@ -150,6 +150,8 @@ def supported_languages():
             'constant_folding',
             'dead_code_elimination',
             'redundant_assignment_removal',
+            'algebraic_simplification',
+            'loop_invariant_code_motion',
             'unused_variable_removal',
             'loop_elimination',
             'function_inlining',

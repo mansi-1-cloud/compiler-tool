@@ -209,8 +209,11 @@ function updateOptimizationCategories(categories) {
     const categoryNames = {
         'constant_folding': '🔢 Constant Folding',
         'dead_code_elimination': '🗑️ Dead Code Elimination',
+        'dead_code_removal': '🗑️ Dead Code Elimination',
         'unused_variable_removal': '🔍 Unused Variables',
         'redundant_assignment_removal': '♻️ Redundant Assignments',
+        'algebraic_simplification': '➗ Algebraic Simplification',
+        'loop_invariant_code_motion': '📤 Loop Invariant Code Motion',
         'loop_elimination': '🔁 Loop Elimination',
         'function_inlining': '📦 Function Inlining',
         'duplicate_call_removal': '🔄 Duplicate Calls',
@@ -313,8 +316,11 @@ function formatOptimizationType(type) {
     const names = {
         'constant_folding': 'Constant Folding',
         'dead_code_elimination': 'Dead Code Elimination',
+        'dead_code_removal': 'Dead Code Elimination',
         'unused_variable_removal': 'Unused Variable Removal',
         'redundant_assignment_removal': 'Redundant Assignment Removal',
+        'algebraic_simplification': 'Algebraic Simplification',
+        'loop_invariant_code_motion': 'Loop Invariant Code Motion',
         'loop_elimination': 'Loop Elimination',
         'function_inlining': 'Function Inlining',
         'duplicate_call_removal': 'Duplicate Call Removal',
