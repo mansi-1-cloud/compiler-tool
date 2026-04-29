@@ -19,8 +19,11 @@ from optimizer import (
     CodeOptimizer,
     LanguageSpecificOptimizer,
     LanguageDetector,
-    LanguageValidator
+    LanguageValidator,
+    parse_expression
 )
+from optimizer.simulator import CodeSimulator
+from optimizer.ast_utils import BinaryOpNode, NumberNode, VariableNode
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -119,18 +122,37 @@ def optimize():
         
         # Generate report
         report = optimizer.get_optimization_report(code, result['optimized_code'])
+        simulator = CodeSimulator(language)
+        original_exec = simulator.simulate(code)
+        optimized_exec = simulator.simulate(result['optimized_code'])
+
+        outputs_match = original_exec['output'] == optimized_exec['output']
         
         return jsonify({
             'success': True,
             'optimized_code': result['optimized_code'],
             'language': language,
             'optimizations_applied': result['optimizations_applied'],
+            'ast_insights': result.get('ast_insights', {}),
             'statistics': {
                 'total_optimizations': report['total_optimizations'],
                 'original_lines': report['original_lines'],
                 'optimized_lines': report['optimized_lines'],
                 'lines_saved': report['lines_saved'],
+                'line_reduction_percentage': report['line_reduction_percentage'],
+                'line_optimization_stats': report.get('line_optimization_stats', []),
                 'optimization_categories': report['optimization_categories']
+            },
+            'output_comparison': {
+                'original_output': original_exec['output'],
+                'optimized_output': optimized_exec['output'],
+                'outputs_match': outputs_match,
+                'original_simulated': original_exec['simulated'],
+                'optimized_simulated': optimized_exec['simulated'],
+                'simulation_notes': {
+                    'original_errors': original_exec['errors'],
+                    'optimized_errors': optimized_exec['errors']
+                }
             }
         }), 200
     
@@ -158,6 +180,52 @@ def supported_languages():
             'duplicate_call_removal'
         ]
     }), 200
+
+
+def _expression_tree(node, prefix='', is_last=True):
+    connector = '└── ' if is_last else '├── '
+    if isinstance(node, NumberNode):
+        label = f'NUM({node.value})'
+    elif isinstance(node, VariableNode):
+        label = f'VAR({node.name})'
+    elif isinstance(node, BinaryOpNode):
+        label = f'OP({node.op})'
+    else:
+        label = 'UNKNOWN'
+
+    lines = [f"{prefix}{connector}{label}"]
+    child_prefix = f"{prefix}{'    ' if is_last else '│   '}"
+
+    if isinstance(node, BinaryOpNode):
+        lines.extend(_expression_tree(node.left, child_prefix, False))
+        lines.extend(_expression_tree(node.right, child_prefix, True))
+
+    return lines
+
+
+@app.route('/parse-tree', methods=['POST'])
+def parse_tree():
+    """Generate parse tree for a single arithmetic expression."""
+    try:
+        if not request.json:
+            return jsonify({'success': False, 'error': 'Request must be JSON'}), 400
+
+        expression = request.json.get('expression', '').strip()
+        if not expression:
+            return jsonify({'success': False, 'error': 'Expression cannot be empty'}), 400
+
+        ast = parse_expression(expression)
+        if ast is None:
+            return jsonify({'success': False, 'error': 'Invalid arithmetic expression'}), 400
+
+        tree_lines = _expression_tree(ast)
+        return jsonify({
+            'success': True,
+            'expression': expression,
+            'tree': '\n'.join(tree_lines)
+        }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Parse tree generation failed: {str(e)}'}), 500
 
 
 @app.route('/sample-code', methods=['GET'])

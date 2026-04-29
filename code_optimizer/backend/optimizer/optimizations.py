@@ -4,8 +4,16 @@ Implements aggressive optimization techniques for C, C++, and Java
 """
 
 import re
-from typing import List, Set, Dict, Tuple
+from typing import List, Set, Dict, Tuple, Optional
 from .analyzer import CodeAnalyzer
+from .ast_utils import (
+    parse_assignment,
+    simplify_ast,
+    ast_to_expression,
+    BinaryOpNode,
+    NumberNode,
+    VariableNode,
+)
 
 
 class CodeOptimizer:
@@ -15,11 +23,49 @@ class CodeOptimizer:
         self.language = language.lower()
         self.analyzer = CodeAnalyzer(language)
         self.optimizations_applied = []
+        self.ast_insights = {
+            'enabled': False,
+            'reason': 'No algebraic expressions detected.',
+            'items': []
+        }
+
+    def _record_optimization(
+        self,
+        opt_type: str,
+        line_number: int,
+        before: str,
+        after: str,
+        optimization_text: Optional[str] = None
+    ):
+        """Store optimization details with before/after snippets for UI reporting."""
+        self.optimizations_applied.append({
+            'type': opt_type,
+            'line_number': line_number,
+            'before': before,
+            'after': after,
+            'optimization': optimization_text or f'{before} -> {after}'
+        })
+
+    def _count_effective_lines(self, code: str) -> int:
+        return len([line for line in code.split('\n') if line.strip()])
+
+    def _normalize_optimization_entries(self):
+        """Backfill before/after for entries produced by older optimization methods."""
+        normalized = []
+        for entry in self.optimizations_applied:
+            if 'before' not in entry:
+                entry['before'] = entry.get('optimization', '')
+            if 'after' not in entry:
+                entry['after'] = entry.get('optimization', '')
+            normalized.append(entry)
+        self.optimizations_applied = normalized
     
     def optimize(self, code: str) -> Dict:
         """Apply all optimizations to code"""
         self.optimizations_applied = []
+        self.ast_insights = self._collect_partial_ast_insights(code)
         optimized_code = code
+        original_effective_lines = self._count_effective_lines(code)
         
         self.analyzer.parse_code(optimized_code)
         
@@ -27,8 +73,8 @@ class CodeOptimizer:
         optimized_code = self.remove_duplicate_function_calls(optimized_code)
         optimized_code = self.inline_simple_functions(optimized_code)
         optimized_code = self.eliminate_redundant_loops(optimized_code)
-        optimized_code = self.combine_variable_declarations(optimized_code)
         optimized_code = self.perform_loop_invariant_code_motion(optimized_code)
+        optimized_code = self.ast_simplify_assignments(optimized_code)
         optimized_code = self.simplify_redundant_expressions(optimized_code)
         optimized_code = self.remove_redundant_variables(optimized_code)
         optimized_code = self.remove_unused_functions(optimized_code)
@@ -36,13 +82,135 @@ class CodeOptimizer:
         optimized_code = self.eliminate_dead_code(optimized_code)
         optimized_code = self.remove_redundant_assignments(optimized_code)
         optimized_code = self.fold_constants(optimized_code)
+        optimized_code = self.combine_variable_declarations(optimized_code)
         optimized_code = self.remove_blank_lines(optimized_code)
+
+        # Never return a version with more effective lines than the input.
+        if self._count_effective_lines(optimized_code) > original_effective_lines:
+            optimized_code = code
+
+        self._normalize_optimization_entries()
         
         return {
             'optimized_code': optimized_code,
             'optimizations_applied': self.optimizations_applied,
+            'ast_insights': self.ast_insights,
+            'line_optimization_stats': self._build_line_optimization_stats(),
             'count': len(self.optimizations_applied)
         }
+
+    def _collect_partial_ast_insights(self, code: str) -> Dict:
+        """Build a small AST view for assignment algebraic expressions only."""
+        items = []
+
+        for i, line in enumerate(code.split('\n'), 1):
+            parsed = parse_assignment(line)
+            if parsed is None:
+                continue
+
+            original_rhs = line.strip().rstrip(';').split('=', 1)[1].strip() if '=' in line else ''
+            if not original_rhs or not re.search(r'[\+\-\*/%]', original_rhs):
+                continue
+
+            if not isinstance(parsed.expression, BinaryOpNode):
+                continue
+
+            simplified = simplify_ast(parsed.expression)
+            items.append({
+                'line_number': i,
+                'target': parsed.variable,
+                'original_expression': original_rhs,
+                'ast': self._ast_to_compact_string(parsed.expression),
+                'simplified_expression': ast_to_expression(simplified)
+            })
+
+        if not items:
+            return {
+                'enabled': False,
+                'reason': 'No algebraic expressions detected; AST view is shown only for algebraic assignments.',
+                'items': []
+            }
+
+        return {
+            'enabled': True,
+            'reason': 'Partial AST generated for assignment expressions to explain constant folding/algebraic simplification.',
+            'items': items
+        }
+
+    def _ast_to_compact_string(self, node) -> str:
+        """Serialize AST in a compact prefix-like format for UI display."""
+        if isinstance(node, NumberNode):
+            return str(node.value)
+        if isinstance(node, VariableNode):
+            return node.name
+        if isinstance(node, BinaryOpNode):
+            left = self._ast_to_compact_string(node.left)
+            right = self._ast_to_compact_string(node.right)
+            return f"({node.op} {left} {right})"
+        return '<unknown>'
+
+    def _build_line_optimization_stats(self) -> List[Dict]:
+        """Aggregate where optimizations were applied (line-wise)."""
+        grouped: Dict[int, Dict] = {}
+
+        for opt in self.optimizations_applied:
+            line_number = opt.get('line_number')
+            if not isinstance(line_number, int):
+                continue
+
+            if line_number not in grouped:
+                grouped[line_number] = {
+                    'line_number': line_number,
+                    'count': 0,
+                    'types': set(),
+                }
+
+            grouped[line_number]['count'] += 1
+            grouped[line_number]['types'].add(opt.get('type', 'unknown'))
+
+        stats = []
+        for line_number in sorted(grouped.keys()):
+            item = grouped[line_number]
+            stats.append({
+                'line_number': item['line_number'],
+                'count': item['count'],
+                'types': sorted(item['types'])
+            })
+
+        return stats
+
+    def ast_simplify_assignments(self, code: str) -> str:
+        """Simplify assignment RHS expressions through a partial AST pass."""
+        lines = code.split('\n')
+        out_lines = []
+
+        for i, line in enumerate(lines, 1):
+            assignment = parse_assignment(line)
+            if assignment is None:
+                out_lines.append(line)
+                continue
+
+            simplified = simplify_ast(assignment.expression)
+            new_rhs = ast_to_expression(simplified)
+
+            if assignment.var_type:
+                rewritten = f"{assignment.var_type} {assignment.variable} = {new_rhs};"
+            else:
+                rewritten = f"{assignment.variable} = {new_rhs};"
+
+            if line.strip().endswith(';') and line.strip() != rewritten.strip():
+                self._record_optimization(
+                    'algebraic_simplification',
+                    i,
+                    line.strip(),
+                    rewritten.strip(),
+                    f'Simplified expression for {assignment.variable}'
+                )
+                out_lines.append(rewritten)
+            else:
+                out_lines.append(line)
+
+        return '\n'.join(out_lines)
 
     def simplify_redundant_expressions(self, code: str) -> str:
         """Remove no-op assignments and simplify basic algebraic identities."""
@@ -72,11 +240,13 @@ class CodeOptimizer:
                 if match:
                     var_name = match.group(1)
                     opt_type = 'redundant_assignment_removal' if reason == 'self_assignment' else 'algebraic_simplification'
-                    self.optimizations_applied.append({
-                        'type': opt_type,
-                        'line_number': i,
-                        'optimization': f'Removed no-op assignment: {var_name} = {var_name}'
-                    })
+                    self._record_optimization(
+                        opt_type,
+                        i,
+                        stripped,
+                        '<removed>',
+                        f'Removed no-op assignment for {var_name}'
+                    )
                     removed = True
                     break
 
@@ -597,42 +767,52 @@ class CodeOptimizer:
         return '\n'.join(result_lines)
     
     def remove_unused_variables(self, code: str) -> str:
-        """Remove unused variable declarations"""
-        try:
-            self.analyzer.parse_code(code)
-            unused_vars = self.analyzer.find_unused_variables()
-        except:
-            unused_vars = []
-        
-        if not unused_vars:
-            return code
-        
+        """Remove assignments/declarations for variables that are never used."""
         lines = code.split('\n')
-        optimized_lines = []
-        
-        for i, line in enumerate(lines):
-            should_remove = False
+        assigned_vars: Dict[str, List[int]] = {}
+        used_vars: Set[str] = set()
+
+        assign_pattern = re.compile(r'^\s*(?:int|double|float|String|boolean|long|char|short)\s+([A-Za-z_]\w*)\s*=|^\s*([A-Za-z_]\w*)\s*=')
+        ident_pattern = re.compile(r'\b[A-Za-z_]\w*\b')
+
+        for i, line in enumerate(lines, 1):
             stripped = line.strip()
-            
-            if stripped and not stripped.startswith('#') and not stripped.startswith('//'):
-                for var_name in unused_vars:
-                    try:
-                        pattern = rf'^\s*(int|double|float|String|boolean|long)\s+{var_name}\s*=|^\s*{var_name}\s*='
-                        if re.search(pattern, line):
-                            if '==' not in line and '!=' not in line:
-                                self.optimizations_applied.append({
-                                    'type': 'dead_code_removal',
-                                    'line_number': i + 1,
-                                    'optimization': f'Removed unused variable: {var_name}'
-                                })
-                                should_remove = True
-                                break
-                    except:
-                        pass
-            
-            if not should_remove:
-                optimized_lines.append(line)
-        
+            if not stripped or stripped.startswith('//') or stripped.startswith('#'):
+                continue
+
+            match = assign_pattern.search(stripped)
+            assigned_var = None
+            if match:
+                assigned_var = match.group(1) or match.group(2)
+                assigned_vars.setdefault(assigned_var, []).append(i)
+
+            rhs = stripped.split('=', 1)[1] if '=' in stripped else stripped
+            for name in ident_pattern.findall(rhs):
+                if name not in {'int', 'double', 'float', 'String', 'boolean', 'long', 'char', 'short', 'return'}:
+                    used_vars.add(name)
+
+        removable_vars = {var for var in assigned_vars if var not in used_vars}
+        if not removable_vars:
+            return code
+
+        optimized_lines = []
+        for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+            match = assign_pattern.search(stripped) if stripped else None
+            target = (match.group(1) or match.group(2)) if match else None
+
+            if target and target in removable_vars:
+                self._record_optimization(
+                    'unused_variable_removal',
+                    i,
+                    line.strip(),
+                    '<removed>',
+                    f'Removed unused variable assignment: {target}'
+                )
+                continue
+
+            optimized_lines.append(line)
+
         return '\n'.join(optimized_lines)
     
     def eliminate_dead_code(self, code: str) -> str:
@@ -663,81 +843,109 @@ class CodeOptimizer:
         return '\n'.join(optimized_lines)
     
     def remove_redundant_assignments(self, code: str) -> str:
-        """Remove redundant assignments"""
-        try:
-            self.analyzer.parse_code(code)
-            redundant_assignments = self.analyzer.find_redundant_assignments()
-            redundant_line_nums = {first_line for first_line, _, _ in redundant_assignments}
-        except:
-            redundant_line_nums = set()
-        
+        """Remove overwritten assignments that are never read before reassignment."""
         lines = code.split('\n')
+        keep_flags = [True] * len(lines)
+        promoted_declarations: Dict[int, Tuple[str, str]] = {}
+
+        assign_pattern = re.compile(
+            r'^\s*(?:(int|double|float|String|boolean|long|char|short)\s+)?([A-Za-z_]\w*)\s*=(?!=)'
+        )
+        ident_pattern = re.compile(r'\b[A-Za-z_]\w*\b')
+
+        next_read_index: Dict[str, int] = {}
+        next_write_index: Dict[str, int] = {}
+
+        for idx in range(len(lines) - 1, -1, -1):
+            line = lines[idx]
+            stripped = line.strip()
+            if not stripped or stripped.startswith('//') or stripped.startswith('#'):
+                continue
+
+            assignment_match = assign_pattern.match(stripped)
+            declared_type = assignment_match.group(1) if assignment_match else None
+            target_var = assignment_match.group(2) if assignment_match else None
+
+            rhs = stripped.split('=', 1)[1] if '=' in stripped else stripped
+            for name in ident_pattern.findall(rhs):
+                if name != target_var:
+                    next_read_index[name] = idx
+
+            if target_var:
+                has_future_read = target_var in next_read_index
+                has_future_write = target_var in next_write_index
+
+                if has_future_write and (not has_future_read or next_write_index[target_var] < next_read_index[target_var]):
+                    keep_flags[idx] = False
+                    self._record_optimization(
+                        'redundant_assignment_removal',
+                        idx + 1,
+                        stripped,
+                        '<removed>',
+                        f'Removed overwritten assignment to {target_var}'
+                    )
+
+                    # Preserve declaration semantics for C/C++/Java by promoting
+                    # the next assignment to a declaration when needed.
+                    next_write = next_write_index[target_var]
+                    if declared_type and next_write is not None and next_write not in promoted_declarations:
+                        next_match = assign_pattern.match(lines[next_write].strip())
+                        if next_match and not next_match.group(1):
+                            promoted_declarations[next_write] = (target_var, declared_type)
+
+                next_write_index[target_var] = idx
+
         optimized_lines = []
-        
-        for i, line in enumerate(lines, 1):
-            if i not in redundant_line_nums:
-                optimized_lines.append(line)
-            else:
-                try:
-                    for first_line, _, var_name in redundant_assignments:
-                        if first_line == i:
-                            self.optimizations_applied.append({
-                                'type': 'redundant_assignment_removal',
-                                'line_number': i,
-                                'optimization': f'Removed redundant assignment to: {var_name}'
-                            })
-                            break
-                except:
-                    pass
-        
+        for i, line in enumerate(lines):
+            if not keep_flags[i]:
+                continue
+
+            if i in promoted_declarations:
+                var_name, var_type = promoted_declarations[i]
+                assignment_match = assign_pattern.match(line.strip())
+                if assignment_match and assignment_match.group(2) == var_name:
+                    leading_ws = re.match(r'^\s*', line).group(0)
+                    rhs = line.split('=', 1)[1].strip() if '=' in line else ''
+                    normalized_rhs = rhs[:-1].strip() if rhs.endswith(';') else rhs
+                    line = f"{leading_ws}{var_type} {var_name} = {normalized_rhs};"
+
+            optimized_lines.append(line)
+
         return '\n'.join(optimized_lines)
     
     def fold_constants(self, code: str) -> str:
-        """Fold constant expressions"""
+        """Fold constants in assignment expressions through the partial AST parser."""
         lines = code.split('\n')
-        optimized_lines = []
-        
-        for i, line in enumerate(lines):
-            optimized_line = line
-            pattern = r'(\d+)\s*([\+\-\*/%])\s*(\d+)'
-            
-            def fold_expression(match):
-                try:
-                    left = int(match.group(1))
-                    op = match.group(2)
-                    right = int(match.group(3))
-                    
-                    if op == '+':
-                        result = left + right
-                    elif op == '-':
-                        result = left - right
-                    elif op == '*':
-                        result = left * right
-                    elif op == '/':
-                        result = int(left / right)
-                    elif op == '%':
-                        result = left % right
-                    else:
-                        return match.group(0)
-                    
-                    self.optimizations_applied.append({
-                        'type': 'constant_folding',
-                        'line_number': i + 1,
-                        'optimization': f'{match.group(0)} → {result}'
-                    })
-                    
-                    return str(result)
-                except:
-                    return match.group(0)
-            
-            try:
-                optimized_line = re.sub(pattern, fold_expression, optimized_line)
-            except:
-                pass
-            
-            optimized_lines.append(optimized_line)
-        
-        return '\n'.join(optimized_lines)
+        out_lines = []
+
+        for i, line in enumerate(lines, 1):
+            assignment = parse_assignment(line)
+            if assignment is None:
+                out_lines.append(line)
+                continue
+
+            before_rhs = ast_to_expression(assignment.expression)
+            simplified = simplify_ast(assignment.expression)
+            after_rhs = ast_to_expression(simplified)
+
+            if before_rhs == after_rhs:
+                out_lines.append(line)
+                continue
+
+            rewritten = f"{assignment.variable} = {after_rhs};"
+            if assignment.var_type:
+                rewritten = f"{assignment.var_type} {assignment.variable} = {after_rhs};"
+
+            self._record_optimization(
+                'constant_folding',
+                i,
+                line.strip(),
+                rewritten.strip(),
+                f'Folded constants: {before_rhs} -> {after_rhs}'
+            )
+            out_lines.append(rewritten)
+
+        return '\n'.join(out_lines)
     
     def remove_blank_lines(self, code: str) -> str:
         """Remove excessive blank lines"""
@@ -765,12 +973,18 @@ class CodeOptimizer:
         """Generate optimization report"""
         original_lines = len([l for l in original_code.split('\n') if l.strip()])
         optimized_lines = len([l for l in optimized_code.split('\n') if l.strip()])
+        lines_saved = original_lines - optimized_lines
+        reduction_percentage = 0.0
+        if original_lines > 0:
+            reduction_percentage = round((lines_saved / original_lines) * 100.0, 2)
         
         return {
             'total_optimizations': len(self.optimizations_applied),
             'original_lines': original_lines,
             'optimized_lines': optimized_lines,
-            'lines_saved': original_lines - optimized_lines,
+            'lines_saved': lines_saved,
+            'line_reduction_percentage': reduction_percentage,
+            'line_optimization_stats': self._build_line_optimization_stats(),
             'optimization_categories': self._categorize_optimizations()
         }
     

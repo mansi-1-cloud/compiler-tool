@@ -58,45 +58,91 @@ code_optimizer/
 └── README.md                    # This file
 ```
 
-## 🚀 Getting Started
+## 🚀 Start Project (Single-File Guide)
+
+This section contains all required steps to run the project end-to-end.
 
 ### Prerequisites
-- **Python 3.7+**
-- **pip** (Python package manager)
-- **Modern web browser** (Chrome, Firefox, Safari, Edge)
+- Python 3.8+
+- pip
+- Modern browser (Chrome/Edge/Firefox)
 
-### Installation
+### Step 1: Open project root
+```powershell
+cd "C:\Users\hp\Desktop\check one\compiler-tool\code_optimizer"
+```
 
-1. **Clone or navigate to project directory:**
-   ```bash
-   cd code_optimizer
-   ```
+### Step 2: Install backend dependencies
+```powershell
+cd backend
+py -m pip install -r requirements.txt
+```
 
-2. **Install Python dependencies:**
-   ```bash
-   cd backend
-   pip install -r requirements.txt
-   ```
+If `py` is unavailable:
+```powershell
+python -m pip install -r requirements.txt
+```
 
-3. **Start the Flask backend server:**
-   ```bash
-   python app.py
-   ```
-   You should see:
-   ```
-   * Running on http://0.0.0.0:5001/ (Press CTRL+C to quit)
-   ```
+### Step 3: Start backend API (Terminal 1)
+```powershell
+cd "C:\Users\hp\Desktop\check one\compiler-tool\code_optimizer\backend"
+py app.py
+```
 
-4. **Open the frontend in your browser:**
-   ```bash
-   # Open the file directly
-   open frontend/index.html
-   # or
-   # Use a local server (Python 3):
-   cd frontend
-   python -m http.server 8000
-   # Then visit http://localhost:8000
-   ```
+Expected URL:
+```text
+http://localhost:5001
+```
+
+Quick health test:
+```powershell
+curl http://localhost:5001/health
+```
+
+### Step 4: Start frontend (Terminal 2)
+```powershell
+cd "C:\Users\hp\Desktop\check one\compiler-tool\code_optimizer\frontend"
+py -m http.server 8000
+```
+
+Open:
+```text
+http://localhost:8000
+```
+
+Then press `Ctrl+F5` once to hard-refresh latest JS/CSS.
+
+### Step 5: Use the app
+1. Select language (Java/C++/C).
+2. Paste code in Original Code.
+3. Click Optimize Code.
+4. Check:
+   - Optimized Code
+   - Optimized Code Output
+   - Line reduction stats
+   - Optimizations Applied (line-wise before/after)
+   - Detected expression parse trees
+
+### Optional API checks
+
+Optimize endpoint:
+```powershell
+curl -X POST http://localhost:5001/optimize ^
+  -H "Content-Type: application/json" ^
+  -d "{\"code\":\"int main(){\\nint x = (2 + 3) * 4;\\nSystem.out.println(x);\\nreturn 0;\\n}\",\"language\":\"java\"}"
+```
+
+Parse tree endpoint:
+```powershell
+curl -X POST http://localhost:5001/parse-tree ^
+  -H "Content-Type: application/json" ^
+  -d "{\"expression\":\"(2+3)*4\"}"
+```
+
+### Troubleshooting
+- `Could not open requirements.txt`: run install command from the `backend` folder.
+- Port busy error: stop old process or switch port in backend and frontend API base URL.
+- Blank/old UI behavior: hard refresh with `Ctrl+F5`.
 
 ## 🎯 Usage Guide
 

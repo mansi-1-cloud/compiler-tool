@@ -33,6 +33,10 @@
                                 <option value="cpp">⚙️ C++</option>
                                 <option value="c">📱 C</option>
                             </select>
+                            <label class="checkbox-label" for="auto-detect">
+                                <input type="checkbox" id="auto-detect">
+                                Auto-detect language
+                            </label>
                         </div>
                     </div>
 
@@ -68,6 +72,10 @@
                             <div class="stat-item">
                                 <span class="stat-label">Lines Saved:</span>
                                 <span class="stat-value" id="stat-saved">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Reduction %:</span>
+                                <span class="stat-value" id="stat-reduction">0%</span>
                             </div>
                         </div>
                     </div>
@@ -118,6 +126,23 @@
             </section>
         </main>
 
+        <section class="parse-tree-section">
+            <div class="parse-tree-card">
+                <h3>Detected Expression Parse Trees</h3>
+                <p class="analysis-subtitle">As you type code, arithmetic expressions are detected and their parse trees are shown below.</p>
+                <div id="expression-parse-trees" class="expression-parse-trees">
+                    <p class="empty-analysis">No arithmetic expressions detected yet.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="optimized-output-section">
+            <div class="optimized-output-card">
+                <h3>Optimized Code Output</h3>
+                <pre id="optimized-output-only" class="output-box">(no output)</pre>
+            </div>
+        </section>
+
         <!-- Details Panel - Optimizations Applied with Line Numbers -->
         <div id="details-panel" class="details-panel" style="display: none;">
             <div class="details-header">
@@ -140,6 +165,6 @@
     </div>
 
     <!-- Scripts -->
-    <script src="script.js"></script>
+    <script src="script.js?v=20260427"></script>
 </body>
 </html>

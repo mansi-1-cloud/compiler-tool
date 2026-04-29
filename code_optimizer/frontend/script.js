@@ -20,12 +20,15 @@ const loadingSpinner = document.getElementById('loading-spinner');
 const detailsPanel = document.getElementById('details-panel');
 const closeDetailsBtn = document.getElementById('close-details');
 const optimizationsList = document.getElementById('optimizations-list');
+const expressionParseTreesEl = document.getElementById('expression-parse-trees');
+const optimizedOutputOnlyEl = document.getElementById('optimized-output-only');
 
 // Statistics elements
 const statTotal = document.getElementById('stat-total');
 const statOriginal = document.getElementById('stat-original');
 const statOptimized = document.getElementById('stat-optimized');
 const statSaved = document.getElementById('stat-saved');
+const statReduction = document.getElementById('stat-reduction');
 const originalLineCount = document.getElementById('original-line-count');
 const optimizedLineCount = document.getElementById('optimized-line-count');
 const optimizationCategories = document.getElementById('optimization-categories');
@@ -33,6 +36,7 @@ const optimizationCategories = document.getElementById('optimization-categories'
 // State
 let currentLanguage = 'java';
 let lastOptimizationResult = null;
+let parseTreeRequestVersion = 0;
 
 /**
  * Initialize event listeners
@@ -55,6 +59,7 @@ function initializeEventListeners() {
 
     // Update line counts as user types
     originalCodeEl.addEventListener('input', debounce(lineCountCheck, 200));
+    originalCodeEl.addEventListener('input', debounce(updateDetectedExpressionTrees, 350));
     optimizedCodeEl.addEventListener('input', debounce(lineCountCheck, 200));
 }
 
@@ -166,6 +171,11 @@ async function optimizeCode() {
             // Show optimizations with line numbers
             displayOptimizationDetails(result.optimizations_applied);
 
+            if (optimizedOutputOnlyEl) {
+                const optimizedOutput = result.output_comparison?.optimized_output;
+                optimizedOutputOnlyEl.textContent = optimizedOutput ? optimizedOutput : '(no output)';
+            }
+
             showStatus(
                 `✨ Code optimized successfully! ${result.statistics.total_optimizations} optimizations applied.`, 
                 'success',
@@ -193,6 +203,97 @@ function updateStatistics(stats) {
     statOriginal.textContent = stats.original_lines || 0;
     statOptimized.textContent = stats.optimized_lines || 0;
     statSaved.textContent = stats.lines_saved || 0;
+    statReduction.textContent = `${stats.line_reduction_percentage || 0}%`;
+}
+
+function extractArithmeticExpressions(code) {
+    const expressions = [];
+    const seen = new Set();
+    const lines = code.split('\n');
+
+    for (const line of lines) {
+        const noComment = line.split('//')[0].trim();
+        if (!noComment) {
+            continue;
+        }
+
+        const assignMatch = noComment.match(/^\s*(?:[A-Za-z_]\w*\s+)?[A-Za-z_]\w*\s*=\s*([^;]+);?\s*$/);
+        if (!assignMatch) {
+            continue;
+        }
+
+        const expr = assignMatch[1].trim();
+        if (!/[+\-*/%]/.test(expr)) {
+            continue;
+        }
+
+        if (!seen.has(expr)) {
+            seen.add(expr);
+            expressions.push(expr);
+        }
+    }
+
+    return expressions;
+}
+
+async function updateDetectedExpressionTrees() {
+    if (!expressionParseTreesEl) {
+        return;
+    }
+
+    const code = originalCodeEl.value || '';
+    const expressions = extractArithmeticExpressions(code);
+    const requestVersion = ++parseTreeRequestVersion;
+
+    expressionParseTreesEl.innerHTML = '';
+
+    if (expressions.length === 0) {
+        expressionParseTreesEl.innerHTML = '<p class="empty-analysis">No arithmetic expressions detected yet.</p>';
+        return;
+    }
+
+    for (const expression of expressions) {
+        try {
+            const response = await fetch(`${API_BASE_URL}/parse-tree`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ expression })
+            });
+
+            const result = await response.json();
+            if (requestVersion !== parseTreeRequestVersion) {
+                return;
+            }
+
+            const item = document.createElement('div');
+            item.className = 'expression-tree-item';
+
+            if (!response.ok || !result.success) {
+                item.innerHTML = `
+                    <p><strong>Expression:</strong> <code>${escapeHtml(expression)}</code></p>
+                    <pre class="output-box tree-box">Parse failed</pre>
+                `;
+            } else {
+                item.innerHTML = `
+                    <p><strong>Expression:</strong> <code>${escapeHtml(expression)}</code></p>
+                    <pre class="output-box tree-box">${escapeHtml(result.tree || 'No parse tree generated.')}</pre>
+                `;
+            }
+
+            expressionParseTreesEl.appendChild(item);
+        } catch (error) {
+            if (requestVersion !== parseTreeRequestVersion) {
+                return;
+            }
+            const item = document.createElement('div');
+            item.className = 'expression-tree-item';
+            item.innerHTML = `
+                <p><strong>Expression:</strong> <code>${escapeHtml(expression)}</code></p>
+                <pre class="output-box tree-box">Parse service unavailable</pre>
+            `;
+            expressionParseTreesEl.appendChild(item);
+        }
+    }
 }
 
 /**
@@ -259,45 +360,11 @@ function displayOptimizationDetails(optimizations) {
         details.className = 'optimization-details';
 
         // Format details based on optimization type
-        let detailsContent = '';
-
-        if (opt.type === 'constant_folding') {
-            detailsContent = `
-                <p><strong>Expression:</strong> <code>${escapeHtml(opt.optimization)}</code></p>
-            `;
-        } else if (opt.type === 'unused_variable_removal') {
-            detailsContent = `
-                <p><strong>Variable:</strong> ${escapeHtml(opt.optimization)}</p>
-            `;
-        } else if (opt.type === 'dead_code_elimination') {
-            detailsContent = `
-                <p><strong>Removed:</strong> <code>${escapeHtml(opt.optimization)}</code></p>
-            `;
-        } else if (opt.type === 'redundant_assignment_removal') {
-            detailsContent = `
-                <p><strong>Variable:</strong> ${escapeHtml(opt.optimization)}</p>
-            `;
-        } else if (opt.type === 'loop_elimination') {
-            detailsContent = `
-                <p><strong>Optimization:</strong> <code>${escapeHtml(opt.optimization)}</code></p>
-            `;
-        } else if (opt.type === 'function_inlining') {
-            detailsContent = `
-                <p><strong>Optimization:</strong> ${escapeHtml(opt.optimization)}</p>
-            `;
-        } else if (opt.type === 'duplicate_call_removal') {
-            detailsContent = `
-                <p><strong>Optimization:</strong> ${escapeHtml(opt.optimization)}</p>
-            `;
-        } else if (opt.type === 'variable_combination') {
-            detailsContent = `
-                <p><strong>Optimization:</strong> ${escapeHtml(opt.optimization)}</p>
-            `;
-        } else {
-            detailsContent = `
-                <p><strong>Optimization:</strong> ${escapeHtml(opt.optimization)}</p>
-            `;
-        }
+        const detailsContent = `
+            <p>${escapeHtml(opt.optimization || '')}</p>
+            <p><strong>Before:</strong> <code>${escapeHtml(opt.before || '')}</code></p>
+            <p><strong>After:</strong> <code>${escapeHtml(opt.after || '')}</code></p>
+        `;
 
         details.innerHTML = detailsContent;
 
@@ -337,6 +404,7 @@ function formatOptimizationType(type) {
  * Escape HTML special characters
  */
 function escapeHtml(text) {
+    const normalizedText = String(text ?? '');
     const map = {
         '&': '&amp;',
         '<': '&lt;',
@@ -344,7 +412,7 @@ function escapeHtml(text) {
         '"': '&quot;',
         "'": '&#039;',
     };
-    return text.replace(/[&<>"']/g, (m) => map[m]);
+    return normalizedText.replace(/[&<>"']/g, (m) => map[m]);
 }
 
 /**
@@ -393,7 +461,14 @@ function resetStatistics() {
     statOriginal.textContent = '0';
     statOptimized.textContent = '0';
     statSaved.textContent = '0';
+    statReduction.textContent = '0%';
     optimizationCategories.innerHTML = '';
+    if (expressionParseTreesEl) {
+        expressionParseTreesEl.innerHTML = '<p class="empty-analysis">No arithmetic expressions detected yet.</p>';
+    }
+    if (optimizedOutputOnlyEl) {
+        optimizedOutputOnlyEl.textContent = '(no output)';
+    }
 }
 
 /**
@@ -444,6 +519,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeEventListeners();
     checkBackendHealth();
     lineCountCheck();
+    updateDetectedExpressionTrees();
 
     // Add keyboard shortcuts
     document.addEventListener('keydown', (e) => {
